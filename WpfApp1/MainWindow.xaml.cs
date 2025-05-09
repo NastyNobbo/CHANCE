@@ -20,6 +20,7 @@ namespace WpfApp1
         string selectedChatUser;
         string ipAddress = ConnectionData.GetCorrectLocalIPv4().ToString();
 
+
         // Словарь чатов: имя пользователя -> список сообщений
         Dictionary<string, List<string>> chats = new Dictionary<string, List<string>>();
 
@@ -28,45 +29,79 @@ namespace WpfApp1
             InitializeComponent();
             usersList.SelectionChanged += UsersList_SelectionChanged;
         }
-        
+
+        private void btnOpenRegister_Click(object sender, RoutedEventArgs e)
+        {
+            RegistrationWindow regWindow = new RegistrationWindow();
+            regWindow.Owner = this;
+            regWindow.ShowDialog();
+        }
+
         private void btnLogin_Click(object sender, RoutedEventArgs e)
         {
-            userName = txtName.Text.Trim();
-            if (string.IsNullOrEmpty(userName))
-            {
-                MessageBox.Show("Введите имя пользователя.");
-                return;
-            }
-
+            if (!TryGetCredentials(out string name, out string password)) return;
             try
             {
                 client = new TcpClient(ipAddress, 56000);
                 stream = client.GetStream();
-
                 var loginMsg = new Message
                 {
                     Type = "login",
-                    Name = userName
+                    Name = name,
+                    Password = password
                 };
                 SendMessage(loginMsg);
-
-                listenThread = new Thread(Listen);
-                listenThread.IsBackground = true;
-                listenThread.Start();
-
-                btnLogin.IsEnabled = false;
-                txtName.IsEnabled = false;
-                txtMessage.IsEnabled = true;
-                btnSend.IsEnabled = true;
-
-                Title = $"Демо Чат - {userName}";
+                byte[] buffer = new byte[4096];
+                int bytesRead = stream.Read(buffer, 0, buffer.Length);
+                string responseJson = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                var response = JsonSerializer.Deserialize<Message>(responseJson);
+                if (response.Type == "login_success")
+                {
+                    userName = name;
+                    LoginPanel.Visibility = Visibility.Collapsed;
+                    ChatGrid.Visibility = Visibility.Visible;
+                    Title = $"Чат - {userName}";
+                    listenThread = new Thread(Listen);
+                    listenThread.IsBackground = true;
+                    listenThread.Start();
+                    txtMessage.IsEnabled = true;
+                    btnSend.IsEnabled = true;
+                }
+                else
+                {
+                    MessageBox.Show($"Ошибка входа: {response.Text}");
+                    stream.Close();
+                    client.Close();
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Ошибка подключения: " + ex.Message);
+                MessageBox.Show($"Ошибка входа: {ex.Message}");
             }
         }
+        private void btnResetPassword_Click(object sender, RoutedEventArgs e)
+        {
+            var resetWindow = new ResetPasswordWindow();
+            resetWindow.Owner = this;
+            resetWindow.ShowDialog();
+        }
 
+        private bool TryGetCredentials(out string name, out string password)
+        {
+            name = txtName.Text.Trim();
+            password = txtPassword.Password;
+            if (string.IsNullOrEmpty(name))
+            {
+                MessageBox.Show("Введите имя пользователя.");
+                return false;
+            }
+            if (string.IsNullOrEmpty(password))
+            {
+                MessageBox.Show("Введите пароль.");
+                return false;
+            }
+            return true;
+        }
         private void Listen()
         {
             byte[] buffer = new byte[8192];
@@ -77,10 +112,8 @@ namespace WpfApp1
                     int bytesRead = stream.Read(buffer, 0, buffer.Length);
                     if (bytesRead == 0)
                         break;
-
                     string json = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                     var message = JsonSerializer.Deserialize<Message>(json);
-
                     if (message.Type == "userlist")
                     {
                         Dispatcher.Invoke(() => UpdateUserList(message.Users));
@@ -95,22 +128,14 @@ namespace WpfApp1
                     }
                     else if (message.Type == "error")
                     {
-                        Dispatcher.Invoke(() =>
-                        {
-                            MessageBox.Show(message.Text);
-                            Disconnect();
-                        });
-                        break;
+                        Dispatcher.Invoke(() => MessageBox.Show(message.Text));
                     }
                 }
             }
             catch (Exception ex)
             {
-                Dispatcher.Invoke(() => MessageBox.Show("Ошибка соединения: " + ex.Message));
-            }
-            finally
-            {
-                Dispatcher.Invoke(() => Disconnect());
+                Dispatcher.Invoke(() => MessageBox.Show("Ошибка связи с сервером: " + ex.Message));
+                Dispatcher.Invoke(() => Close());
             }
         }
 
@@ -122,7 +147,6 @@ namespace WpfApp1
                 if (user != userName)
                     usersList.Items.Add(user);
             }
-            // Если выбранный пользователь в списке отсутствует — очистить
             if (selectedChatUser != null && !usersList.Items.Contains(selectedChatUser))
             {
                 selectedChatUser = null;
@@ -130,20 +154,19 @@ namespace WpfApp1
             }
         }
 
+
         private void ReceiveChatMessage(Message message)
         {
             string fromUser = message.From;
             string text = message.Text;
-
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            string displayMsg = $"{timestamp} {fromUser}: {text}";
             if (!chats.ContainsKey(fromUser))
                 chats[fromUser] = new List<string>();
-
-            chats[fromUser].Add($"{fromUser}: {text}");
-
-            // Если открыт чат с этим пользователем, показать сообщение
+            chats[fromUser].Add(displayMsg);
             if (fromUser == selectedChatUser)
             {
-                chatList.Items.Add($"{fromUser}: {text}");
+                chatList.Items.Add(displayMsg);
             }
         }
 
@@ -154,9 +177,7 @@ namespace WpfApp1
                 chats[dialogWithUser] = new List<string>();
             else
                 chats[dialogWithUser].Clear();
-
             chats[dialogWithUser].AddRange(message.DialogMessages);
-
             if (dialogWithUser == selectedChatUser)
             {
                 chatList.Items.Clear();
@@ -171,12 +192,10 @@ namespace WpfApp1
         {
             if (usersList.SelectedItem == null)
                 return;
-
             selectedChatUser = usersList.SelectedItem.ToString();
-
-            // Запрашиваем у сервера диалог с этим пользователем
             RequestDialog(selectedChatUser);
         }
+
 
         private void RequestDialog(string user)
         {
@@ -187,27 +206,25 @@ namespace WpfApp1
                 To = user
             };
             SendMessage(msg);
+            chatList.Items.Clear();
         }
 
         private void btnSend_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrEmpty(selectedChatUser))
             {
-                MessageBox.Show("Выберите пользователя для чата.");
+                MessageBox.Show("Выберите пользователя.");
                 return;
             }
-
             string text = txtMessage.Text.Trim();
             if (string.IsNullOrEmpty(text))
                 return;
-
-            // Добавляем сообщение в локальный чат
+            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            string displayMsg = $"{timestamp} {userName}: {text}";
             if (!chats.ContainsKey(selectedChatUser))
                 chats[selectedChatUser] = new List<string>();
-
-            chats[selectedChatUser].Add($"Я: {text}");
-            chatList.Items.Add($"Я: {text}");
-
+            chats[selectedChatUser].Add(displayMsg);
+            chatList.Items.Add(displayMsg);
             var message = new Message
             {
                 Type = "message",
@@ -216,7 +233,6 @@ namespace WpfApp1
                 Text = text
             };
             SendMessage(message);
-
             txtMessage.Clear();
         }
 
@@ -234,27 +250,6 @@ namespace WpfApp1
             }
         }
 
-        private void Disconnect()
-        {
-            try
-            {
-                stream?.Close();
-                client?.Close();
-            }
-            catch { }
-
-            Dispatcher.Invoke(() =>
-            {
-                btnLogin.IsEnabled = true;
-                txtName.IsEnabled = true;
-                txtMessage.IsEnabled = false;
-                btnSend.IsEnabled = false;
-                usersList.Items.Clear();
-                chatList.Items.Clear();
-                Title = "Демо Чат";
-            });
-        }
-
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
@@ -263,14 +258,20 @@ namespace WpfApp1
                 listenThread?.Abort();
             }
             catch { }
-            Disconnect();
+            stream?.Close();
+            client?.Close();
         }
+
+
+        
     }
+
 
     public class Message
     {
         public string Type { get; set; } // login, message, userlist, error, dialog, getdialog
         public string Name { get; set; } // для login
+        public string Password { get; set; }
         public string From { get; set; } // для сообщения
         public string To { get; set; } // для сообщения
         public string Text { get; set; } // для сообщения, ошибки

@@ -1,31 +1,47 @@
 ﻿<Window x:Class="WpfApp1.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Демо Чат" Height="450" Width="650" WindowStartupLocation="CenterScreen"><Grid Margin="10">
-    <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="180"/>
-        <ColumnDefinition Width="10"/>
-        <ColumnDefinition Width="*"/>
-    </Grid.ColumnDefinitions>
-    <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="*"/>
-        <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
-        <!-- Ввод имени -->
-        <StackPanel Grid.Column="0" Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
-            <TextBlock VerticalAlignment="Center" Text="Имя:" Margin="0,0,5,0"/>
-            <TextBox Name="txtName" Width="100"/>
-            <Button Name="btnLogin" Content="Войти" Margin="5,0,0,0" Click="btnLogin_Click"/>
+                   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Чат Клиент с Авторизацией и Паролем" Height="450" Width="650" WindowStartupLocation="CenterScreen">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Стартовый экран входа/регистрации -->
+        <StackPanel x:Name="LoginPanel" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,0,0,10">
+            <TextBlock Text="Имя: " VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtName" Width="150" Margin="0,0,10,0"/>
+            <TextBlock Text="Пароль: " VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <PasswordBox x:Name="txtPassword" Width="150" Margin="0,0,10,0"/>
+            <Button x:Name="btnLogin" Content="Войти" Width="80" Click="btnLogin_Click" Margin="0,0,5,0"/>
+            <Button x:Name="btnOpenRegister" Content="Регистрация" Width="120" Click="btnOpenRegister_Click"/>
+            <Button Content="Сбросить пароль" Click="btnResetPassword_Click" Margin="0,10,0,0"/>
         </StackPanel>
-        <!-- Список пользователей -->
-        <ListBox Name="usersList" Grid.Column="0" Grid.Row="1" />
-        <!-- Чат -->
-        <ListBox Name="chatList" Grid.Column="2" Grid.Row="1" Margin="0,0,0,10" />
-        <!-- Ввод сообщения -->
-        <StackPanel Grid.Column="2" Grid.Row="2" Orientation="Horizontal">
-            <TextBox Name="txtMessage" Width="400" Height="30" IsEnabled="False" Margin="0,0,5,0"/>
-            <Button Name="btnSend" Content="Отправить" IsEnabled="False" Click="btnSend_Click" Width="70"/>
-        </StackPanel>
+
+        <!-- Основной интерфейс чата -->
+        <Grid x:Name="ChatGrid" Grid.Row="1" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Список пользователей -->
+            <ListBox x:Name="usersList" Grid.Column="0" Grid.Row="0" />
+
+            <!-- Окно чата -->
+            <ListBox x:Name="chatList" Grid.Column="2" Grid.Row="0" Margin="0,0,0,10"/>
+
+            <!-- Ввод сообщения -->
+            <StackPanel Grid.Column="2" Grid.Row="1" Orientation="Horizontal">
+                <TextBox x:Name="txtMessage" Width="400" Height="30" IsEnabled="False" Margin="0,0,5,0"/>
+                <Button x:Name="btnSend" Content="Отправить" IsEnabled="False" Click="btnSend_Click" Width="70"/>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
