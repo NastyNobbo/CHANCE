@@ -11,6 +11,8 @@ using System.Reflection.Metadata;
 using System.Security.Claims;
 using System.Windows;
 using System.Xml.Linq;
+using System.Net.NetworkInformation;
+using System.Data.SQLite;
 
 namespace ConsoleApp1
 {
@@ -24,12 +26,21 @@ namespace ConsoleApp1
         // Сообщения хранятся как строки с форматом: "Отправитель: Текст"
         static ConcurrentDictionary<string, List<string>> dialogs = new ConcurrentDictionary<string, List<string>>();
 
+        const string DbFile = "chat_users.db";
+        static string ConnectionString = $"Data Source={DbFile}";
+
         static void Main(string[] args)
         {
-            const int port = 5000;
-            listener = new TcpListener(IPAddress.Any, port);
+            Console.WriteLine("Сервер запускается...");
+
+            InitializeDatabase();
+
+            const int port = 56000;
+            IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
+            listener = new TcpListener(myIp, port);
             listener.Start();
             Console.WriteLine($"Сервер запущен на порту {port}");
+            
 
             while (true)
             {
@@ -37,7 +48,126 @@ namespace ConsoleApp1
                 ThreadPool.QueueUserWorkItem(ClientHandler, client);
             }
         }
+        static void InitializeDatabase()
+        {
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+            string createUsersTableSql = @"
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                );";
+            string createDialogsTableSql = @"
+                CREATE TABLE IF NOT EXISTS dialogs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dialog_key TEXT NOT NULL,
+                    sender TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );";
+            using var cmd = new SQLiteCommand(createUsersTableSql, connection);
+            cmd.ExecuteNonQuery();
+            cmd.CommandText = createDialogsTableSql;
+            cmd.ExecuteNonQuery();
+        }
+        static bool AddUserIfNotExists(string username)
+        {
+            try
+            {
+                using var connection = new SQLiteConnection(ConnectionString);
+                connection.Open();
+                // Проверяем есть ли пользователь
+                string checkSql = "SELECT COUNT(*) FROM users WHERE username = @username;";
+                using var checkCmd = connection.CreateCommand();
+                checkCmd.CommandText = checkSql;
+                checkCmd.Parameters.AddWithValue("@username", username);
+                long count = (long)checkCmd.ExecuteScalar();
+                if (count > 0)
+                {
+                    return true; // Уже есть
+                }
+                // Вставляем нового пользователя
+                string insertSql = "INSERT INTO users (username) VALUES (@username);";
+                using var insertCmd = connection.CreateCommand();
+                insertCmd.CommandText = insertSql;
+                insertCmd.Parameters.AddWithValue("@username", username);
+                insertCmd.ExecuteNonQuery();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при работе с БД: {ex.Message}");
+                return false;
+            }
+        }
 
+        static void SaveDialogMessage(string dialogKey, string sender, string message)
+        {
+            try
+            {
+                using var connection = new SQLiteConnection(ConnectionString);
+                connection.Open();
+                string insertSql = "INSERT INTO dialogs (dialog_key, sender, message) VALUES (@dialog_key, @sender, @message);";
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = insertSql;
+                cmd.Parameters.AddWithValue("@dialog_key", dialogKey);
+                cmd.Parameters.AddWithValue("@sender", sender);
+                cmd.Parameters.AddWithValue("@message", message);
+                cmd.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка сохранения сообщения чата: {ex.Message}");
+            }
+        }
+        static List<string> LoadDialogMessages(string dialogKey)
+        {
+            try
+            {
+                using var connection = new SQLiteConnection(ConnectionString);
+                connection.Open();
+                string selectSql = "SELECT sender, message, sent_at FROM dialogs WHERE dialog_key = @dialog_key ORDER BY sent_at ASC;";
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = selectSql;
+                cmd.Parameters.AddWithValue("@dialog_key", dialogKey);
+                List<string> messages = new List<string>();
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    string sender = reader.GetString(0);
+                    string message = reader.GetString(1);
+                    DateTime sentAt = reader.GetDateTime(2);
+                    messages.Add($"{sentAt.ToString("yyyy-MM-dd HH:mm:ss")} {sender}: {message}");
+                }
+                return messages;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка загрузки сообщений чата: {ex.Message}");
+                return new List<string>();
+            }
+        }
+        static List<string> GetAllUsersFromDatabase()
+        {
+            var users = new List<string>();
+            try
+            {
+                using var connection = new SQLiteConnection(ConnectionString);
+                connection.Open();
+                string selectSql = "SELECT username FROM users ORDER BY username;";
+                using var cmd = new SQLiteCommand(selectSql, connection);
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    users.Add(reader.GetString(0));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при получении списка пользователей из БД: {ex.Message}");
+            }
+            return users;
+        }
         static void ClientHandler(object obj)
         {
             TcpClient tcpClient = (TcpClient)obj;
@@ -49,6 +179,7 @@ namespace ConsoleApp1
                 // Ждем сообщение login
                 byte[] buffer = new byte[4096];
                 int bytesRead = stream.Read(buffer, 0, buffer.Length);
+
                 if (bytesRead == 0) throw new Exception("Пустое имя пользователя");
                 string loginMsg = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                 var loginObj = JsonSerializer.Deserialize<Message>(loginMsg);
@@ -56,6 +187,13 @@ namespace ConsoleApp1
                     throw new Exception("Некорректное имя пользователя");
 
                 userName = loginObj.Name.Trim();
+
+                if (!AddUserIfNotExists(userName))
+                {
+                    SendMessage(stream, new Message { Type = "error", Text = "Ошибка БД при добавлении пользователя." });
+                    tcpClient.Close();
+                    return;
+                }
 
                 if (!clients.TryAdd(userName, new ClientInfo { Name = userName, Client = tcpClient, Stream = stream }))
                 {
@@ -77,27 +215,18 @@ namespace ConsoleApp1
                 while (true)
                 {
                     bytesRead = stream.Read(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) break; // отключение
+                    if (bytesRead == 0) break;
 
                     string msgJson = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                     var message = JsonSerializer.Deserialize<Message>(msgJson);
                     if (message == null) continue;
-
                     if (message.Type == "message")
                     {
-                        // Сохраняем сообщение в диалогах
                         string dialogKey = GetDialogKey(userName, message.To);
                         string formattedMsg = $"{userName}: {message.Text}";
 
-                        dialogs.AddOrUpdate(dialogKey,
-                            new List<string>() { formattedMsg },
-                            (key, oldList) =>
-                            {
-                                oldList.Add(formattedMsg);
-                                return oldList;
-                            });
+                        SaveDialogMessage(dialogKey, userName, message.Text);  // save to DB
 
-                        // Получаем получателя и отправляем ему сообщение, если есть
                         if (!string.IsNullOrWhiteSpace(message.To) && clients.TryGetValue(message.To, out var toClient))
                         {
                             SendMessage(toClient.Stream, new Message
@@ -111,30 +240,15 @@ namespace ConsoleApp1
                     }
                     else if (message.Type == "getdialog")
                     {
-                        // Клиент запросил диалог с пользователем message.To
                         string dialogKey = GetDialogKey(userName, message.To);
-                        if (dialogs.TryGetValue(dialogKey, out var dialogMessages))
+                        var dialogMessages = LoadDialogMessages(dialogKey);
+                        SendMessage(stream, new Message
                         {
-                            // Отправляем клиенту все сообщения диалога как одно сообщение с типом dialog
-                            SendMessage(stream, new Message
-                            {
-                                Type = "dialog",
-                                From = message.To,
-                                To = userName,
-                                DialogMessages = dialogMessages
-                            });
-                        }
-                        else
-                        {
-                            // Если диалог пустой, отправляем пустой список
-                            SendMessage(stream, new Message
-                            {
-                                Type = "dialog",
-                                From = message.To,
-                                To = userName,
-                                DialogMessages = new List<string>()
-                            });
-                        }
+                            Type = "dialog",
+                            From = message.To,
+                            To = userName,
+                            DialogMessages = dialogMessages
+                        });
                     }
                 }
             }
@@ -156,10 +270,11 @@ namespace ConsoleApp1
 
         static void BroadcastUserList()
         {
+            var allUsers = GetAllUsersFromDatabase();
             var userListMessage = new Message
             {
                 Type = "userlist",
-                Users = new List<string>(clients.Keys)
+                Users = allUsers
             };
             string json = JsonSerializer.Serialize(userListMessage);
             byte[] data = Encoding.UTF8.GetBytes(json);

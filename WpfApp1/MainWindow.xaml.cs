@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Net.NetworkInformation;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +18,7 @@ namespace WpfApp1
         Thread listenThread;
         string userName;
         string selectedChatUser;
+        string ipAddress = ConnectionData.GetCorrectLocalIPv4().ToString();
 
         // Словарь чатов: имя пользователя -> список сообщений
         Dictionary<string, List<string>> chats = new Dictionary<string, List<string>>();
@@ -25,7 +28,7 @@ namespace WpfApp1
             InitializeComponent();
             usersList.SelectionChanged += UsersList_SelectionChanged;
         }
-
+        
         private void btnLogin_Click(object sender, RoutedEventArgs e)
         {
             userName = txtName.Text.Trim();
@@ -37,7 +40,7 @@ namespace WpfApp1
 
             try
             {
-                client = new TcpClient("127.0.0.1", 5000);
+                client = new TcpClient(ipAddress, 56000);
                 stream = client.GetStream();
 
                 var loginMsg = new Message
