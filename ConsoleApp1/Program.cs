@@ -307,8 +307,10 @@ namespace ConsoleApp1
                         tcpClient.Close();
                         return;
                     }
+                    List<string> allUsers = GetAllUsersFromDatabase();
                     SendMessage(stream, new Message { Type = "login_success", Text = "Вход успешен.", Name = userName });
                     Console.WriteLine($"Пользователь {userName} вошел");
+                    
 
 
 
@@ -414,12 +416,13 @@ namespace ConsoleApp1
         }
         static void BroadcastUserList()
         {
-            foreach(var kvp in clients)
+            List<string> allUsers = GetAllUsersFromDatabase();
+            foreach (var kvp in clients)
     {
                 var currentUser = kvp.Key;
 
                 // Исключаем самого пользователя из списка
-                var otherUsers = clients.Keys.Where(u => u != currentUser).OrderBy(u => u).ToList();
+                var otherUsers = allUsers.Where(u => u != currentUser).OrderBy(u => u).ToList();
 
                 var userListMessage = new Message
                 {
