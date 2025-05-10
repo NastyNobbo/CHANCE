@@ -41,7 +41,7 @@ namespace ConsoleApp1
             listener = new TcpListener(myIp, port);
             listener.Start();
             Console.WriteLine($"Сервер запущен на порту {port}");
-            
+
 
             while (true)
             {
@@ -56,7 +56,8 @@ namespace ConsoleApp1
             string createUsersTableSql = @"
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
+                    username TEXT NOT NULL,
+                    login TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL
                 );";
             string createDialogsTableSql = @"
@@ -80,24 +81,24 @@ namespace ConsoleApp1
             var hashBytes = sha.ComputeHash(bytes);
             return Convert.ToBase64String(hashBytes);
         }
-        static bool UserExists(string username)
+        static bool UserExists(string login)
         {
             using var connection = new SQLiteConnection(ConnectionString);
             connection.Open();
-            string sql = "SELECT COUNT(*) FROM users WHERE username = @username;";
+            string sql = "SELECT COUNT(*) FROM users WHERE login = @login;";
             using var cmd = new SQLiteCommand(sql, connection);
-            cmd.Parameters.AddWithValue("@username", username);
+            cmd.Parameters.AddWithValue("@login", login);
             long count = (long)(cmd.ExecuteScalar() ?? 0);
             return count > 0;
         }
 
-        static bool VerifyUserPassword(string username, string password)
+        static bool VerifyUserPassword(string login, string password)
         {
             using var connection = new SQLiteConnection(ConnectionString);
             connection.Open();
-            string sql = "SELECT password_hash FROM users WHERE username = @username;";
+            string sql = "SELECT password_hash FROM users WHERE login = @login;";
             using var cmd = new SQLiteCommand(sql, connection);
-            cmd.Parameters.AddWithValue("@username", username);
+            cmd.Parameters.AddWithValue("@login", login);
             var result = cmd.ExecuteScalar();
             if (result == null) return false;
             string storedHash = (string)result;
@@ -105,14 +106,15 @@ namespace ConsoleApp1
             return storedHash == inputHash;
         }
 
-        static bool AddUser(string username, string password)
+        static bool AddUser(string login, string username, string password)
         {
             try
             {
                 using var connection = new SQLiteConnection(ConnectionString);
                 connection.Open();
-                string insertSql = "INSERT INTO users (username, password_hash) VALUES (@username, @password_hash);";
+                string insertSql = "INSERT INTO users (login, username, password_hash) VALUES (@login, @username, @password_hash);";
                 using var cmd = new SQLiteCommand(insertSql, connection);
+                cmd.Parameters.AddWithValue("@login", login);
                 cmd.Parameters.AddWithValue("@username", username);
                 string hash = ComputeHash(password);
                 cmd.Parameters.AddWithValue("@password_hash", hash);
@@ -125,15 +127,16 @@ namespace ConsoleApp1
                 return false;
             }
         }
-        static void UpdateUserPassword(string username, string newHash)
+
+        static void UpdateUserPassword(string login, string newHash)
         {
             try
             {
                 using var connection = new SQLiteConnection(ConnectionString);
                 connection.Open();
-                string updateSql = "UPDATE users SET password_hash = @password_hash WHERE username = @username;";
+                string updateSql = "UPDATE users SET password_hash = @password_hash WHERE login = @login;";
                 using var cmd = new SQLiteCommand(updateSql, connection);
-                cmd.Parameters.AddWithValue("@username", username);
+                cmd.Parameters.AddWithValue("@login", login);
                 cmd.Parameters.AddWithValue("@password_hash", newHash);
                 cmd.ExecuteNonQuery();
             }
@@ -202,13 +205,16 @@ namespace ConsoleApp1
                 using var cmd = new SQLiteCommand(selectSql, connection);
                 cmd.Parameters.AddWithValue("@dialog_key", dialogKey);
                 List<string> messages = new List<string>();
+                TimeZoneInfo localTimeZone = TimeZoneInfo.Local;
+
                 using var reader = cmd.ExecuteReader();
                 while (reader.Read())
                 {
                     string sender = reader.GetString(0);
                     string message = reader.GetString(1);
                     DateTime sentAt = reader.GetDateTime(2);
-                    messages.Add($"{sentAt:yyyy-MM-dd HH:mm:ss} {sender}: {message}");
+                    DateTime sentAtTargetTimeZone = TimeZoneInfo.ConvertTime(sentAt, TimeZoneInfo.Utc, localTimeZone);
+                    messages.Add($"{sentAtTargetTimeZone:yyyy-MM-dd HH:mm:ss} {sender}: {message}");
                 }
                 return messages;
             }
@@ -243,6 +249,7 @@ namespace ConsoleApp1
         {
             TcpClient tcpClient = (TcpClient)obj;
             NetworkStream stream = tcpClient.GetStream();
+            string login = null;
             string userName = null;
             try
             {
@@ -251,22 +258,23 @@ namespace ConsoleApp1
                 if (bytesRead == 0) throw new Exception("Пустой запрос");
                 string requestJson = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                 var request = JsonSerializer.Deserialize<Message>(requestJson);
-                if (request == null || string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrEmpty(request.Password))
+                if (request == null || string.IsNullOrWhiteSpace(request.Login) || string.IsNullOrEmpty(request.Password))
                     throw new Exception("Некорректный запрос");
-                userName = request.Name.Trim();
+                login = request.Login.Trim();
                 string password = request.Password;
 
                 if (request.Type == "register")
                 {
-                    if (UserExists(userName))
+                    userName = request.Name.Trim();
+                    if (UserExists(login))
                     {
-                        SendMessage(stream, new Message { Type = "register_fail", Text = "Пользователь с таким именем уже существует." });
+                        SendMessage(stream, new Message { Type = "register_fail", Text = "Пользователь с таким логином уже существует." });
                         tcpClient.Close();
                         return;
                     }
                     else
                     {
-                        if (!AddUser(userName, password))
+                        if (!AddUser(login, userName, password))
                         {
                             SendMessage(stream, new Message { Type = "register_fail", Text = "Ошибка при регистрации." });
                             tcpClient.Close();
@@ -280,25 +288,26 @@ namespace ConsoleApp1
 
                 else if (request.Type == "login")
                 {
-                    if (!UserExists(userName))
+                    if (!UserExists(login))
                     {
                         SendMessage(stream, new Message { Type = "login_fail", Text = "Пользователь не найден." });
                         tcpClient.Close();
                         return;
                     }
-                    if (!VerifyUserPassword(userName, password))
+                    if (!VerifyUserPassword(login, password))
                     {
                         SendMessage(stream, new Message { Type = "login_fail", Text = "Неверный пароль." });
                         tcpClient.Close();
                         return;
                     }
+                    userName = GetUsernameByLogin(login);
                     if (!clients.TryAdd(userName, new ClientInfo { Name = userName, Client = tcpClient, Stream = stream }))
                     {
                         SendMessage(stream, new Message { Type = "login_fail", Text = "Пользователь уже подключен." });
                         tcpClient.Close();
                         return;
                     }
-                    SendMessage(stream, new Message { Type = "login_success", Text = "Вход успешен." });
+                    SendMessage(stream, new Message { Type = "login_success", Text = "Вход успешен.", Name = userName });
                     Console.WriteLine($"Пользователь {userName} вошел");
 
 
@@ -320,7 +329,6 @@ namespace ConsoleApp1
                         if (message.Type == "message")
                         {
                             string dialogKey = GetDialogKey(userName, message.To);
-                            string formattedMsg = $"{userName}: {message.Text}";
                             SaveDialogMessage(dialogKey, userName, message.Text);
                             if (!string.IsNullOrWhiteSpace(message.To) && clients.TryGetValue(message.To, out var toClient))
                             {
@@ -347,27 +355,27 @@ namespace ConsoleApp1
                         }
                         else if (request.Type == "reset_password")
                         {
-                            if (!UserExists(userName))
+                            if (!UserExists(login))
                             {
                                 SendMessage(stream, new Message { Type = "reset_password_fail", Text = "Пользователь не найден." });
                                 continue;
                             }
                             string newHash = ComputeHash(password);
-                            UpdateUserPassword(userName, newHash);
+                            UpdateUserPassword(login, newHash);
                             SendMessage(stream, new Message { Type = "reset_password_success", Text = "Пароль успешно сброшен." });
                         }
                     }
                 }
                 else if (request.Type == "reset_password")
                 {
-                    if (!UserExists(userName))
+                    if (!UserExists(login))
                     {
                         SendMessage(stream, new Message { Type = "reset_password_fail", Text = "Пользователь не найден." });
                         tcpClient.Close();
                         return;
                     }
                     string newHash = ComputeHash(password);
-                    UpdateUserPassword(userName, newHash);
+                    UpdateUserPassword(login, newHash);
                     SendMessage(stream, new Message { Type = "reset_password_success", Text = "Пароль успешно сброшен." });
                     tcpClient.Close();
                     return;
@@ -394,26 +402,41 @@ namespace ConsoleApp1
                 tcpClient.Close();
             }
         }
-
+        static string GetUsernameByLogin(string login)
+        {
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+            string sql = "SELECT username FROM users WHERE login = @login;";
+            using var cmd = new SQLiteCommand(sql, connection);
+            cmd.Parameters.AddWithValue("@login", login);
+            var result = cmd.ExecuteScalar();
+            return result?.ToString() ?? login;
+        }
         static void BroadcastUserList()
         {
-            var allUsers = GetAllUsersFromDatabase();
-            var userListMessage = new Message
-            {
-                Type = "userlist",
-                Users = allUsers
-            };
-            string json = JsonSerializer.Serialize(userListMessage);
-            byte[] data = Encoding.UTF8.GetBytes(json);
-            foreach (var kvp in clients)
-            {
+            foreach(var kvp in clients)
+    {
+                var currentUser = kvp.Key;
+
+                // Исключаем самого пользователя из списка
+                var otherUsers = clients.Keys.Where(u => u != currentUser).OrderBy(u => u).ToList();
+
+                var userListMessage = new Message
+                {
+                    Type = "userlist",
+                    Users = otherUsers
+                };
+
+                string json = JsonSerializer.Serialize(userListMessage);
+                byte[] data = Encoding.UTF8.GetBytes(json);
+
                 try
                 {
                     kvp.Value.Stream.Write(data, 0, data.Length);
                 }
                 catch
                 {
-                    // Игнорируем ошибки отправки
+                    // Игнорируем ошибки
                 }
             }
         }
@@ -444,7 +467,8 @@ namespace ConsoleApp1
     class Message
     {
         public string Type { get; set; } // register, register_success, register_fail, login, login_success, login_fail, message, userlist, getdialog, dialog, error
-        public string Name { get; set; } // Для login/register
+        public string Login { get; set; } // Для login/register
+        public string Name { get; set; }
         public string Password { get; set; }
         public string From { get; set; } // для message
         public string To { get; set; } // для message или getdialog

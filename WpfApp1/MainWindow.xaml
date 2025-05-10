@@ -10,8 +10,8 @@
 
         <!-- Стартовый экран входа/регистрации -->
         <StackPanel x:Name="LoginPanel" Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Top" Margin="0,0,0,10">
-            <TextBlock Text="Имя: " VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <TextBox x:Name="txtName" Width="150" Margin="0,0,10,0"/>
+            <TextBlock Text="Логин: " VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtLogin" Width="150" Margin="0,0,10,0"/>
             <TextBlock Text="Пароль: " VerticalAlignment="Center" Margin="0,0,5,0"/>
             <PasswordBox x:Name="txtPassword" Width="150" Margin="0,0,10,0"/>
             <Button x:Name="btnLogin" Content="Войти" Width="80" Click="btnLogin_Click" Margin="0,0,5,0"/>

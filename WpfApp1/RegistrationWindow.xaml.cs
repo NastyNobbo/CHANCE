@@ -32,24 +32,43 @@ namespace WpfApp1
 
         private void btnRegister_Click(object sender, RoutedEventArgs e)
         {
-            string username = txtRegName.Text.Trim();
+            string name = txtRegName.Text.Trim();
+            string login = txtRegLogin.Text.Trim();
             string password = txtRegPassword.Password;
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+            string repeatPassword = txtRepeatRegPassword.Password;
+
+            if (string.IsNullOrEmpty(name))
             {
-                MessageBox.Show("Пожалуйста, заполните все поля.");
+                MessageBox.Show("Введите имя.");
+                return;
+            }
+            if (string.IsNullOrEmpty(login))
+            {
+                MessageBox.Show("Введите логин.");
+                return;
+            }
+            if (string.IsNullOrEmpty(password))
+            {
+                MessageBox.Show("Введите пароль.");
+                return;
+            }
+            if (password != repeatPassword)
+            {
+                MessageBox.Show("Пароли не совпадают.");
                 return;
             }
             try
             {
                 using var client = new TcpClient(ipAddress, 56000);
                 using var stream = client.GetStream();
-                var registerMsg = new Message
+                var registerMessage = new Message
                 {
                     Type = "register",
-                    Name = username,
+                    Name = name,
+                    Login = login,
                     Password = password
                 };
-                string json = JsonSerializer.Serialize(registerMsg);
+                string json = JsonSerializer.Serialize(registerMessage);
                 byte[] data = Encoding.UTF8.GetBytes(json);
                 stream.Write(data, 0, data.Length);
                 byte[] buffer = new byte[4096];
@@ -65,6 +84,8 @@ namespace WpfApp1
                 {
                     MessageBox.Show($"Ошибка регистрации: {response.Text}");
                 }
+                stream.Close();
+                client.Close();
             }
             catch (Exception ex)
             {

@@ -16,10 +16,10 @@ namespace WpfApp1
 
         private void btnResetPassword_Click(object sender, RoutedEventArgs e)
         {
-            string username = txtUsername.Text.Trim();
+            string login = txtLogin.Text.Trim();
             string newPassword = txtNewPassword.Password;
 
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(newPassword))
+            if (string.IsNullOrEmpty(login) || string.IsNullOrEmpty(newPassword))
             {
                 MessageBox.Show("Пожалуйста, заполните все поля.");
                 return;
@@ -33,7 +33,7 @@ namespace WpfApp1
                 var resetMsg = new Message
                 {
                     Type = "reset_password",
-                    Name = username,
+                    Login = login,
                     Password = newPassword
                 };
 
