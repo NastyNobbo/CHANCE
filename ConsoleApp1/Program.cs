@@ -146,36 +146,6 @@ namespace ConsoleApp1
             }
         }
 
-        static bool AddUserIfNotExists(string username)
-        {
-            try
-            {
-                using var connection = new SQLiteConnection(ConnectionString);
-                connection.Open();
-                // Проверяем есть ли пользователь
-                string checkSql = "SELECT COUNT(*) FROM users WHERE username = @username;";
-                using var checkCmd = connection.CreateCommand();
-                checkCmd.CommandText = checkSql;
-                checkCmd.Parameters.AddWithValue("@username", username);
-                long count = (long)checkCmd.ExecuteScalar();
-                if (count > 0)
-                {
-                    return true; // Уже есть
-                }
-                // Вставляем нового пользователя
-                string insertSql = "INSERT INTO users (username) VALUES (@username);";
-                using var insertCmd = connection.CreateCommand();
-                insertCmd.CommandText = insertSql;
-                insertCmd.Parameters.AddWithValue("@username", username);
-                insertCmd.ExecuteNonQuery();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Ошибка при работе с БД: {ex.Message}");
-                return false;
-            }
-        }
 
         static void SaveDialogMessage(string dialogKey, string sender, string message)
         {
