@@ -40,6 +40,7 @@ namespace ConsoleApp1
             IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
             listener = new TcpListener(myIp, port);
             listener.Start();
+            Console.WriteLine(myIp);
             Console.WriteLine($"Сервер запущен на порту {port}");
 
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +17,8 @@ namespace WpfApp1
         string userName; // сохраняем имя пользователя
         string selectedChatUser;
         string ipAddress = ConnectionData.GetCorrectLocalIPv4().ToString();
+        int port = 56000;
+
 
         Dictionary<string, List<string>> chats = new Dictionary<string, List<string>>();
         List<string> groupChats = new List<string>();
@@ -24,6 +27,7 @@ namespace WpfApp1
         public MainWindow()
         {
             InitializeComponent();
+            defaultConnection();
             usersList.SelectionChanged += UsersList_SelectionChanged;
             groupList.SelectionChanged += GroupList_SelectionChanged;
         }
@@ -34,15 +38,37 @@ namespace WpfApp1
             regWindow.Owner = this;
             regWindow.ShowDialog();
         }
-
+        public void defaultConnection()
+        {
+            string defaultPath = "default_connection.txt";
+            if (File.Exists(defaultPath))
+            {
+                var line = File.ReadAllText(defaultPath).Trim();
+                var parts = line.Split(':');
+                if (parts.Length == 2 && int.TryParse(parts[1], out int savedPort))
+                {
+                    ipAddress = parts[0];
+                    port = savedPort;
+                }
+            }
+        }
         private void btnLogin_Click(object sender, RoutedEventArgs e)
         {
             if (!TryGetCredentials(out string login, out string password)) return;
 
             try
             {
-                client = new TcpClient(ipAddress, 56000);
-                stream = client.GetStream();
+                try 
+                { 
+                    client = new TcpClient(ipAddress, port);
+                    stream = client.GetStream();
+                
+                }
+                catch (SocketException ex)
+                {
+                    MessageBox.Show($"Ошибка подключения к серверу: {ex.Message}");
+                    return;
+                }
                 var loginMsg = new Message
                 {
                     Type = "login",
@@ -423,6 +449,48 @@ namespace WpfApp1
             };
             SendMessage(inviteMsg);
             MessageBox.Show($"Приглашение отправлено пользователю {targetUser} в группу {groupName}.");
+        }
+
+        private void btnConnectionSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var settingsWindow = new ConnectionSettingsWindow(ipAddress, port);
+            if (settingsWindow.ShowDialog() == true)
+            {
+                ipAddress = settingsWindow.IpAddress;
+                port = settingsWindow.Port;
+
+                MessageBox.Show($"Подключение изменено на {ipAddress}:{port}");
+
+                // Если пользователь уже авторизован — переподключаем
+                if (!string.IsNullOrEmpty(userName))
+                {
+                    try
+                    {
+                        stream?.Close();
+                        client?.Close();
+                        listenThread?.Abort();
+                    }
+                    catch { }
+
+                    try
+                    {
+                        client = new TcpClient(ipAddress, port);
+                        stream = client.GetStream();
+
+                        var loginMsg = new Message
+                        {
+                            Type = "login",
+                            Login = userName,
+                            Password = txtPassword.Password // Убедитесь, что это поле всё ещё содержит пароль
+                        };
+                        SendMessage(loginMsg);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Ошибка переподключения: {ex.Message}");
+                    }
+                }
+            }
         }
     }
 

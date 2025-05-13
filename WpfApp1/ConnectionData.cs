@@ -11,6 +11,7 @@ namespace WpfApp1
 {
     internal class ConnectionData
     {
+        public string port = "56000";
         public static IPAddress GetCorrectLocalIPv4()
         {
             var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces()
