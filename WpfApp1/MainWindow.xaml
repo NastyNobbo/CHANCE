@@ -53,8 +53,11 @@
         <Grid x:Name="ChatGrid" Grid.Row="1" Visibility="Collapsed">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="10"/>
+                <!-- Пользователи -->
+                <ColumnDefinition Width="200"/>
+                <!-- Группы -->
                 <ColumnDefinition Width="*"/>
+                <!-- Чат -->
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
@@ -62,29 +65,47 @@
             </Grid.RowDefinitions>
 
             <!-- Список пользователей -->
-            <Border Background="White" Margin="0,0,10,0" CornerRadius="5" 
-                    BorderBrush="#CCCCCC" BorderThickness="1" >
+            <Border Grid.Column="0" Background="White" Margin="0,0,10,0" CornerRadius="5"
+            BorderBrush="#CCCCCC" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="Пользователи" FontWeight="Bold" Margin="10,5"/>
+                    <ListBox x:Name="usersList" />
+                </StackPanel>
+            </Border>
 
-                <ListBox x:Name="usersList" />
+            <!-- Список групп -->
+            <Border Grid.Column="1" Background="White" Margin="0,0,10,0" CornerRadius="5"
+            BorderBrush="#CCCCCC" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="Группы" FontWeight="Bold" Margin="10,5"/>
+                    <ListBox x:Name="groupList" Height="150"/>
+                    <Button x:Name="btnCreateGroup" Click="btnCreateGroup_Click" 
+                    Content="Создать группу" Margin="10,5,10,10"
+                    Background="#673AB7" Foreground="White"
+                    BorderBrush="Transparent" Padding="10" FontWeight="Bold"/>
+                    <Button x:Name="btnInviteToGroup" Click="btnInviteToGroup_Click" 
+                    Content="Пригласить в группу" Margin="10,5,10,10"
+                    Background="#673AB7" Foreground="White"
+                    BorderBrush="Transparent" Padding="10" FontWeight="Bold"/>
+                </StackPanel>
             </Border>
 
             <!-- Окно чата -->
-            <Border Background="White" Margin="0,0,0,10" CornerRadius="5" 
-                    BorderBrush="#CCCCCC" BorderThickness="1" Grid.Column="2" >
-
+            <Border Grid.Column="2" Background="White" Margin="0,0,0,10" CornerRadius="5"
+            BorderBrush="#CCCCCC" BorderThickness="1">
                 <ListBox x:Name="chatList" />
             </Border>
 
             <!-- Ввод сообщения -->
             <StackPanel Grid.Column="2" Grid.Row="1" Orientation="Horizontal">
-                <TextBox x:Name="txtMessage" Height="35" IsEnabled="False" 
-                         Margin="0,0,5,0" Padding="10" Background="#EAEAEA" 
-                         BorderBrush="#CCCCCC" BorderThickness="1" 
-                         VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
-                <Button x:Name="btnSend" Content="Отправить" IsEnabled="False" 
-                        Click="btnSend_Click" Width="80" Background="#4CAF50" 
-                        Foreground="White" BorderBrush="Transparent" Padding="10" 
-                        FontWeight="Bold" VerticalAlignment="Center"/>
+                <TextBox x:Name="txtMessage" Height="35" IsEnabled="False"
+                 Margin="0,0,5,0" Padding="10" Background="#EAEAEA"
+                 BorderBrush="#CCCCCC" BorderThickness="1"
+                 VerticalAlignment="Center" HorizontalAlignment="Stretch"/>
+                <Button x:Name="btnSend" Content="Отправить" IsEnabled="False"
+                Click="btnSend_Click" Width="100" Background="#4CAF50"
+                Foreground="White" BorderBrush="Transparent" Padding="10"
+                FontWeight="Bold" VerticalAlignment="Center"/>
             </StackPanel>
         </Grid>
     </Grid>

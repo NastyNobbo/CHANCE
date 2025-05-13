@@ -68,6 +68,31 @@ namespace ConsoleApp1
                     message TEXT NOT NULL,
                     sent_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 );";
+            string createGroupChatsTableSql = @"
+                CREATE TABLE IF NOT EXISTS group_chats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    group_name TEXT UNIQUE NOT NULL
+                );";
+            string createGroupMembersTableSql = @"
+                CREATE TABLE IF NOT EXISTS group_members (
+                    group_id INTEGER NOT NULL,
+                    username TEXT NOT NULL,
+                    FOREIGN KEY(group_id) REFERENCES group_chats(id)
+                );";
+            string createGroupMessagesTableSql = @"
+                CREATE TABLE IF NOT EXISTS group_messages (
+                    group_id INTEGER NOT NULL,
+                    sender TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(group_id) REFERENCES group_chats(id)
+                );";
+            using var cmd2 = new SQLiteCommand(createGroupChatsTableSql, connection);
+            cmd2.ExecuteNonQuery();
+            cmd2.CommandText = createGroupMembersTableSql;
+            cmd2.ExecuteNonQuery();
+            cmd2.CommandText = createGroupMessagesTableSql;
+            cmd2.ExecuteNonQuery();
             using var cmd = new SQLiteCommand(createUsersTableSql, connection);
             cmd.ExecuteNonQuery();
             cmd.CommandText = createDialogsTableSql;
@@ -278,7 +303,7 @@ namespace ConsoleApp1
                         return;
                     }
                     List<string> allUsers = GetAllUsersFromDatabase();
-                    SendMessage(stream, new Message { Type = "login_success", Text = "Вход успешен.", Name = userName });
+                    SendMessage(stream, new Message { Type = "login_success", Text = "Вход успешен.", Name = userName, Users = LoadUserGroups(userName) });
                     Console.WriteLine($"Пользователь {userName} вошел");
                     
 
@@ -310,6 +335,51 @@ namespace ConsoleApp1
                                     From = userName,
                                     To = message.To,
                                     Text = message.Text
+                                });
+                            }
+                        }
+                        else if (message.Type == "create_group")
+                        {
+                            CreateGroup(message.Text, userName);
+                        }
+                        else if (message.Type == "group_message")
+                        {
+                            SaveGroupMessage(message.To, userName, message.Text);
+                            BroadcastGroupMessage(message.To, userName, message.Text);
+                        }
+                        else if (message.Type == "group_history")
+                        {
+                            var msgs = LoadGroupMessages(message.To);
+                            SendMessage(stream, new Message
+                            {
+                                Type = "group_history",
+                                To = message.To,
+                                DialogMessages = msgs
+                            });
+                        }
+                        else if (message.Type == "logout")
+                        {
+                            Console.WriteLine($"Пользователь {userName} отключается по запросу клиента.");
+                            break;
+                        }
+                        else if (message.Type == "invite_to_group")
+                        {
+                            using var connection = new SQLiteConnection(ConnectionString);
+                            connection.Open();
+                            long groupId = GetGroupId(message.To, connection);
+
+                            var cmd = new SQLiteCommand("INSERT INTO group_members (group_id, username) VALUES (@gid, @user);", connection);
+                            cmd.Parameters.AddWithValue("@gid", groupId);
+                            cmd.Parameters.AddWithValue("@user", message.Text); // message.Text = username для приглашения
+                            cmd.ExecuteNonQuery();
+
+                            // Сообщим приглашённому, если он онлайн
+                            if (clients.TryGetValue(message.Text, out var invitedClient))
+                            {
+                                SendMessage(invitedClient.Stream, new Message
+                                {
+                                    Type = "group_invited",
+                                    Text = message.To // group name
                                 });
                             }
                         }
@@ -369,10 +439,126 @@ namespace ConsoleApp1
                 {
                     clients.TryRemove(userName, out _);
                     BroadcastUserList();
-                    Console.WriteLine($"Пользователь {userName} отключился");
+                    Console.WriteLine($"Пользователь {userName} отключён");
                 }
                 tcpClient.Close();
             }
+        }
+        static void CreateGroup(string groupName, string creator)
+        {
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+            using var tr = connection.BeginTransaction();
+
+            var cmd = new SQLiteCommand("INSERT INTO group_chats (group_name) VALUES (@name);", connection);
+            cmd.Parameters.AddWithValue("@name", groupName);
+            cmd.ExecuteNonQuery();
+
+            long groupId = connection.LastInsertRowId;
+
+            var cmdAddUser = new SQLiteCommand("INSERT INTO group_members (group_id, username) VALUES (@id, @user);", connection);
+            cmdAddUser.Parameters.AddWithValue("@id", groupId);
+            cmdAddUser.Parameters.AddWithValue("@user", creator);
+            cmdAddUser.ExecuteNonQuery();
+
+            tr.Commit();
+            if (clients.TryGetValue(creator, out var creatorClient))
+            {
+                SendMessage(creatorClient.Stream, new Message
+                {
+                    Type = "group_created",
+                    Text = groupName
+                });
+            }
+        }
+
+        static void SaveGroupMessage(string groupName, string sender, string message)
+        {
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+
+            long groupId = GetGroupId(groupName, connection);
+
+            var cmd = new SQLiteCommand("INSERT INTO group_messages (group_id, sender, message) VALUES (@gid, @sender, @msg);", connection);
+            cmd.Parameters.AddWithValue("@gid", groupId);
+            cmd.Parameters.AddWithValue("@sender", sender);
+            cmd.Parameters.AddWithValue("@msg", message);
+            cmd.ExecuteNonQuery();
+        }
+        static List<string> LoadUserGroups(string user)
+        {
+            var groups = new List<string>();
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+            var cmd = new SQLiteCommand(
+              "SELECT gc.group_name FROM group_chats gc " +
+              "JOIN group_members gm ON gc.id = gm.group_id " +
+              "WHERE gm.username = @user;", connection);
+            cmd.Parameters.AddWithValue("@user", user);
+            using var rd = cmd.ExecuteReader();
+            while (rd.Read())
+                groups.Add(rd.GetString(0));
+            return groups;
+        }
+        static List<string> LoadGroupMessages(string groupName)
+        {
+            var messages = new List<string>();
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+
+            long groupId = GetGroupId(groupName, connection);
+
+            var cmd = new SQLiteCommand("SELECT sender, message, sent_at FROM group_messages WHERE group_id = @gid ORDER BY sent_at ASC;", connection);
+            cmd.Parameters.AddWithValue("@gid", groupId);
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                string sender = reader.GetString(0);
+                string text = reader.GetString(1);
+                DateTime ts = reader.GetDateTime(2);
+                messages.Add($"{ts:yyyy-MM-dd HH:mm:ss} {sender}: {text}");
+            }
+            return messages;
+        }
+
+        static void BroadcastGroupMessage(string groupName, string sender, string text)
+        {
+            using var connection = new SQLiteConnection(ConnectionString);
+            connection.Open();
+
+            long groupId = GetGroupId(groupName, connection);
+
+            var cmd = new SQLiteCommand("SELECT username FROM group_members WHERE group_id = @id;", connection);
+            cmd.Parameters.AddWithValue("@id", groupId);
+            using var reader = cmd.ExecuteReader();
+            var members = new List<string>();
+            while (reader.Read())
+            {
+                members.Add(reader.GetString(0));
+            }
+
+            foreach (var member in members)
+            {
+                if (clients.TryGetValue(member, out var client))
+                {
+                    SendMessage(client.Stream, new Message
+                    {
+                        Type = "group_message",
+                        From = sender,
+                        To = groupName,
+                        Text = text
+                    });
+                }
+            }
+        }
+
+        static long GetGroupId(string groupName, SQLiteConnection connection)
+        {
+            var cmd = new SQLiteCommand("SELECT id FROM group_chats WHERE group_name = @name;", connection);
+            cmd.Parameters.AddWithValue("@name", groupName);
+            var res = cmd.ExecuteScalar();
+            return (long)(res ?? throw new Exception("Группа не найдена"));
         }
         static string GetUsernameByLogin(string login)
         {

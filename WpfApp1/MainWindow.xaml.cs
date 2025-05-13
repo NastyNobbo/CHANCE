@@ -18,11 +18,14 @@ namespace WpfApp1
         string ipAddress = ConnectionData.GetCorrectLocalIPv4().ToString();
 
         Dictionary<string, List<string>> chats = new Dictionary<string, List<string>>();
+        List<string> groupChats = new List<string>();
+        string selectedGroupChat = null;
 
         public MainWindow()
         {
             InitializeComponent();
             usersList.SelectionChanged += UsersList_SelectionChanged;
+            groupList.SelectionChanged += GroupList_SelectionChanged;
         }
 
         private void btnOpenRegister_Click(object sender, RoutedEventArgs e)
@@ -50,6 +53,7 @@ namespace WpfApp1
 
                 byte[] buffer = new byte[4096];
                 int bytesRead = stream.Read(buffer, 0, buffer.Length);
+
                 string responseJson = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                 var response = JsonSerializer.Deserialize<Message>(responseJson);
 
@@ -59,7 +63,16 @@ namespace WpfApp1
                     LoginPanel.Visibility = Visibility.Collapsed;
                     ChatGrid.Visibility = Visibility.Visible;
                     Title = $"Чат - {userName}";
-
+                    if (response.Users != null)
+                    {
+                        groupChats.Clear();
+                        groupList.Items.Clear();
+                        foreach (var g in response.Users)
+                        {
+                            groupChats.Add(g);
+                            groupList.Items.Add(g);
+                        }
+                    }
                     listenThread = new Thread(Listen) { IsBackground = true };
                     listenThread.Start();
 
@@ -128,6 +141,39 @@ namespace WpfApp1
                             case "message":
                                 ReceiveChatMessage(message);
                                 break;
+                            case "group_message":
+                                ReceiveGroupMessage(message);
+                                break;
+                            case "group_history":
+                                ReceiveGroupHistory(message);
+                                break;
+                            case "group_list":
+                                groupChats.Clear();
+                                groupList.Items.Clear();
+                                foreach (var g in message.Users.Distinct()) // на всякий случай
+                                {
+                                    groupChats.Add(g);
+                                    groupList.Items.Add(g);
+                                }
+                                break;
+                            case "group_invited":
+                                string newGroup = message.Text;
+                                if (!groupChats.Contains(newGroup))
+                                {
+                                    groupChats.Add(newGroup);
+                                    groupList.Items.Add(newGroup);
+                                }
+                                MessageBox.Show($"Вы были приглашены в группу: {newGroup}");
+                                break;
+                            case "group_created":
+                                // Добавление новой группы в список
+                                string newGroupName = message.Text;
+                                if (!groupChats.Contains(newGroupName))
+                                {
+                                    groupChats.Add(newGroupName);
+                                    groupList.Items.Add(newGroupName);
+                                }
+                                break;
                             case "dialog":
                                 ReceiveDialogMessages(message);
                                 break;
@@ -144,7 +190,30 @@ namespace WpfApp1
                 Dispatcher.Invoke(() => Close());
             }
         }
+        private void ReceiveGroupMessage(Message message)
+        {
+            string text = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message.From}: {message.Text}";
+            if (!chats.ContainsKey(message.To))
+                chats[message.To] = new List<string>();
+            chats[message.To].Add(text);
+            if (selectedGroupChat == message.To)
+                chatList.Items.Add(text);
+        }
 
+        private void ReceiveGroupHistory(Message message)
+        {
+            if (!chats.ContainsKey(message.To))
+                chats[message.To] = new List<string>();
+            else
+                chats[message.To].Clear();
+            chats[message.To].AddRange(message.DialogMessages);
+            if (selectedGroupChat == message.To)
+            {
+                chatList.Items.Clear();
+                foreach (var msg in chats[message.To])
+                    chatList.Items.Add(msg);
+            }
+        }
         private void UpdateUserList(List<string> users)
         {
             usersList.Items.Clear();
@@ -201,6 +270,7 @@ namespace WpfApp1
         {
             if (usersList.SelectedItem == null)
                 return;
+            selectedGroupChat = null;
 
             selectedChatUser = usersList.SelectedItem.ToString();
             RequestDialog(selectedChatUser);
@@ -220,12 +290,6 @@ namespace WpfApp1
 
         private void btnSend_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(selectedChatUser))
-            {
-                MessageBox.Show("Выберите пользователя.");
-                return;
-            }
-
             string text = txtMessage.Text.Trim();
             if (string.IsNullOrEmpty(text))
                 return;
@@ -233,13 +297,39 @@ namespace WpfApp1
             string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
             string displayMsg = $"{timestamp} {userName}: {text}";
 
+            // Если выбран групповой чат
+            if (!string.IsNullOrEmpty(selectedGroupChat))
+            {
+                if (!chats.ContainsKey(selectedGroupChat))
+                    chats[selectedGroupChat] = new List<string>();
+
+                var groupMessage = new Message
+                {
+                    Type = "group_message",
+                    From = userName,
+                    To = selectedGroupChat,
+                    Text = text
+                };
+
+                SendMessage(groupMessage);
+                txtMessage.Clear();
+                return;
+            }
+
+            // Если выбран личный чат
+            if (string.IsNullOrEmpty(selectedChatUser))
+            {
+                MessageBox.Show("Выберите пользователя или группу для отправки сообщения.");
+                return;
+            }
+
             if (!chats.ContainsKey(selectedChatUser))
                 chats[selectedChatUser] = new List<string>();
 
             chats[selectedChatUser].Add(displayMsg);
             chatList.Items.Add(displayMsg);
 
-            var message = new Message
+            var privateMessage = new Message
             {
                 Type = "message",
                 From = userName,
@@ -247,9 +337,10 @@ namespace WpfApp1
                 Text = text
             };
 
-            SendMessage(message);
+            SendMessage(privateMessage);
             txtMessage.Clear();
         }
+
 
         private void SendMessage(Message message)
         {
@@ -268,9 +359,70 @@ namespace WpfApp1
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
+            try
+            {
+                if (stream != null && stream.CanWrite)
+                {
+                    SendMessage(new Message { Type = "logout", From = userName });
+                    Thread.Sleep(100); // подождать, чтобы сообщение успело уйти
+                }
+            }
+            catch { /* игнорируем */ }
+
             try { listenThread?.Abort(); } catch { }
             stream?.Close();
             client?.Close();
+        }
+
+        private void btnCreateGroup_Click(object sender, RoutedEventArgs e)
+        {
+            string groupName = Microsoft.VisualBasic.Interaction.InputBox("Введите название группы", "Новая группа");
+            if (!string.IsNullOrWhiteSpace(groupName))
+            {
+                SendMessage(new Message { Type = "create_group", Text = groupName });
+                groupChats.Add(groupName);
+                groupList.Items.Add(groupName);
+            }
+        }
+        private void GroupList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            if (groupList.SelectedItem == null) 
+                return;
+            selectedChatUser = null;
+            selectedGroupChat = groupList.SelectedItem.ToString();
+            RequestGroupHistory(selectedGroupChat);
+        }
+
+        private void RequestGroupHistory(string groupName)
+        {
+            SendMessage(new Message { Type = "group_history", To = groupName });
+            chatList.Items.Clear();
+        }
+
+        private void btnInviteToGroup_Click(object sender, RoutedEventArgs e)
+        {
+            if (groupList.SelectedItem == null)
+            {
+                MessageBox.Show("Выберите группу.");
+                return;
+            }
+            if (usersList.SelectedItem == null)
+            {
+                MessageBox.Show("Выберите пользователя для приглашения.");
+                return;
+            }
+
+            string groupName = groupList.SelectedItem.ToString();
+            string targetUser = usersList.SelectedItem.ToString();
+
+            var inviteMsg = new Message
+            {
+                Type = "invite_to_group",
+                To = groupName,
+                Text = targetUser
+            };
+            SendMessage(inviteMsg);
+            MessageBox.Show($"Приглашение отправлено пользователю {targetUser} в группу {groupName}.");
         }
     }
 
