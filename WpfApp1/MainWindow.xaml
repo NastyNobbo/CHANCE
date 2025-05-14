@@ -113,7 +113,7 @@
 
             <!-- Ввод сообщения -->
             <StackPanel Grid.Column="2" Grid.Row="1" Orientation="Horizontal">
-                <TextBox x:Name="txtMessage" Height="35" IsEnabled="False"
+                <TextBox x:Name="txtMessage" Width="Auto" Height="35" IsEnabled="False"
                  Margin="0,0,5,0" Padding="10" Background="#EAEAEA"
                  BorderBrush="#CCCCCC" BorderThickness="1"
                  VerticalAlignment="Center" HorizontalAlignment="Stretch"/>

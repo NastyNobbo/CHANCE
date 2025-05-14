@@ -25,11 +25,26 @@ namespace WpfApp1
     public partial class RegistrationWindow : Window
     {
         string ipAddress = ConnectionData.GetCorrectLocalIPv4().ToString();
+        int port = 56000;
         public RegistrationWindow()
         {
             InitializeComponent();
+            defaultConnection();
         }
-
+        public void defaultConnection()
+        {
+            string defaultPath = "default_connection.txt";
+            if (File.Exists(defaultPath))
+            {
+                var line = File.ReadAllText(defaultPath).Trim();
+                var parts = line.Split(':');
+                if (parts.Length == 2 && int.TryParse(parts[1], out int savedPort))
+                {
+                    ipAddress = parts[0];
+                    port = savedPort;
+                }
+            }
+        }
         private void btnRegister_Click(object sender, RoutedEventArgs e)
         {
             string name = txtRegName.Text.Trim();
@@ -59,7 +74,7 @@ namespace WpfApp1
             }
             try
             {
-                using var client = new TcpClient(ipAddress, 56000);
+                using var client = new TcpClient(ipAddress, port);
                 using var stream = client.GetStream();
                 var registerMessage = new Message
                 {

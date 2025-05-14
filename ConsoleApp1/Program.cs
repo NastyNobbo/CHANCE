@@ -40,8 +40,7 @@ namespace ConsoleApp1
             IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
             listener = new TcpListener(myIp, port);
             listener.Start();
-            Console.WriteLine(myIp);
-            Console.WriteLine($"Сервер запущен на порту {port}");
+            Console.WriteLine($"Сервер запущен на IP-адресе {myIp} и порту {port}");
 
 
             while (true)
@@ -210,7 +209,7 @@ namespace ConsoleApp1
                     string message = reader.GetString(1);
                     DateTime sentAt = reader.GetDateTime(2);
                     DateTime sentAtTargetTimeZone = TimeZoneInfo.ConvertTime(sentAt, TimeZoneInfo.Utc, localTimeZone);
-                    messages.Add($"{sentAtTargetTimeZone:yyyy-MM-dd HH:mm:ss} {sender}: {message}");
+                    messages.Add($"{sentAtTargetTimeZone:yyyy.MM.dd HH:mm:ss} {sender}: {message}");
                 }
                 return messages;
             }
@@ -511,14 +510,15 @@ namespace ConsoleApp1
 
             var cmd = new SQLiteCommand("SELECT sender, message, sent_at FROM group_messages WHERE group_id = @gid ORDER BY sent_at ASC;", connection);
             cmd.Parameters.AddWithValue("@gid", groupId);
-
+            TimeZoneInfo localTimeZone = TimeZoneInfo.Local;
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
                 string sender = reader.GetString(0);
                 string text = reader.GetString(1);
                 DateTime ts = reader.GetDateTime(2);
-                messages.Add($"{ts:yyyy-MM-dd HH:mm:ss} {sender}: {text}");
+                DateTime sentAtTargetTimeZone = TimeZoneInfo.ConvertTime(ts, TimeZoneInfo.Utc, localTimeZone);
+                messages.Add($"{sentAtTargetTimeZone} {sender}: {text}");
             }
             return messages;
         }

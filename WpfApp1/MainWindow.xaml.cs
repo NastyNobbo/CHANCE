@@ -320,7 +320,7 @@ namespace WpfApp1
             if (string.IsNullOrEmpty(text))
                 return;
 
-            string timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            string timestamp = DateTime.Now.ToString("yyyy.MM.dd HH:mm:ss");
             string displayMsg = $"{timestamp} {userName}: {text}";
 
             // Если выбран групповой чат
@@ -464,31 +464,31 @@ namespace WpfApp1
                 // Если пользователь уже авторизован — переподключаем
                 if (!string.IsNullOrEmpty(userName))
                 {
+                    // Закрываем соединение и поток
                     try
                     {
+                        SendMessage(new Message { Type = "logout", From = userName });
+                        Thread.Sleep(100);
+                        listenThread?.Abort();
                         stream?.Close();
                         client?.Close();
-                        listenThread?.Abort();
                     }
                     catch { }
 
-                    try
-                    {
-                        client = new TcpClient(ipAddress, port);
-                        stream = client.GetStream();
+                    // Возврат в окно авторизации
+                    ChatGrid.Visibility = Visibility.Collapsed;
+                    LoginPanel.Visibility = Visibility.Visible;
+                    Title = "Чат - Авторизация";
+                    txtMessage.IsEnabled = false;
+                    btnSend.IsEnabled = false;
 
-                        var loginMsg = new Message
-                        {
-                            Type = "login",
-                            Login = userName,
-                            Password = txtPassword.Password // Убедитесь, что это поле всё ещё содержит пароль
-                        };
-                        SendMessage(loginMsg);
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Ошибка переподключения: {ex.Message}");
-                    }
+                    // Очищаем состояние
+                    userName = null;
+                    selectedChatUser = null;
+                    selectedGroupChat = null;
+                    usersList.Items.Clear();
+                    groupList.Items.Clear();
+                    chatList.Items.Clear();
                 }
             }
         }
