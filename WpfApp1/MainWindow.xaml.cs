@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Windows;
+using System.Windows.Input;
 
 namespace WpfApp1
 {
@@ -58,11 +59,11 @@ namespace WpfApp1
 
             try
             {
-                try 
-                { 
+                try
+                {
                     client = new TcpClient(ipAddress, port);
                     stream = client.GetStream();
-                
+
                 }
                 catch (SocketException ex)
                 {
@@ -298,6 +299,8 @@ namespace WpfApp1
                 return;
             selectedGroupChat = null;
 
+            Dispatcher.BeginInvoke(new Action(() => txtMessage.Focus()));
+
             selectedChatUser = usersList.SelectedItem.ToString();
             RequestDialog(selectedChatUser);
         }
@@ -367,6 +370,15 @@ namespace WpfApp1
             txtMessage.Clear();
         }
 
+        private void txtMessage_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                btnSend_Click(null, null);
+
+            }
+        }
+
 
         private void SendMessage(Message message)
         {
@@ -412,7 +424,7 @@ namespace WpfApp1
         }
         private void GroupList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (groupList.SelectedItem == null) 
+            if (groupList.SelectedItem == null)
                 return;
             selectedChatUser = null;
             selectedGroupChat = groupList.SelectedItem.ToString();
@@ -461,37 +473,41 @@ namespace WpfApp1
 
                 MessageBox.Show($"Подключение изменено на {ipAddress}:{port}");
 
-                // Если пользователь уже авторизован — переподключаем
-                if (!string.IsNullOrEmpty(userName))
-                {
-                    // Закрываем соединение и поток
-                    try
-                    {
-                        SendMessage(new Message { Type = "logout", From = userName });
-                        Thread.Sleep(100);
-                        listenThread?.Abort();
-                        stream?.Close();
-                        client?.Close();
-                    }
-                    catch { }
 
-                    // Возврат в окно авторизации
-                    ChatGrid.Visibility = Visibility.Collapsed;
-                    LoginPanel.Visibility = Visibility.Visible;
-                    Title = "Чат - Авторизация";
-                    txtMessage.IsEnabled = false;
-                    btnSend.IsEnabled = false;
 
-                    // Очищаем состояние
-                    userName = null;
-                    selectedChatUser = null;
-                    selectedGroupChat = null;
-                    usersList.Items.Clear();
-                    groupList.Items.Clear();
-                    chatList.Items.Clear();
-                }
             }
         }
+        private void btnLogout_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                SendMessage(new Message { Type = "logout", From = userName });
+                Thread.Sleep(100);
+                listenThread?.Abort();
+                stream?.Close();
+                client?.Close();
+            }
+            catch
+            {
+
+            }
+            // Возврат в окно авторизации
+            ChatGrid.Visibility = Visibility.Collapsed;
+            LoginPanel.Visibility = Visibility.Visible;
+            Title = "Чат - Авторизация";
+            txtMessage.IsEnabled = false;
+            btnSend.IsEnabled = false;
+
+            // Очищаем состояние
+            userName = null;
+            selectedChatUser = null;
+            selectedGroupChat = null;
+            usersList.Items.Clear();
+            groupList.Items.Clear();
+            chatList.Items.Clear();
+        }
+
+
     }
 
     public class Message
