@@ -35,9 +35,11 @@ namespace ConsoleApp1
             Console.WriteLine("Сервер запускается...");
 
             InitializeDatabase();
+            StartBackupTimer();
 
-            const int port = 56000;
+
             IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
+            const int port = 56000;
             listener = new TcpListener(myIp, port);
             listener.Start();
             Console.WriteLine($"Сервер запущен на IP-адресе {myIp} и порту {port}");
@@ -60,6 +62,8 @@ namespace ConsoleApp1
                     login TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL
                 );";
+            using var cmd = new SQLiteCommand(createUsersTableSql, connection);
+            cmd.ExecuteNonQuery();
             string createDialogsTableSql = @"
                 CREATE TABLE IF NOT EXISTS dialogs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,8 +97,6 @@ namespace ConsoleApp1
             cmd2.ExecuteNonQuery();
             cmd2.CommandText = createGroupMessagesTableSql;
             cmd2.ExecuteNonQuery();
-            using var cmd = new SQLiteCommand(createUsersTableSql, connection);
-            cmd.ExecuteNonQuery();
             cmd.CommandText = createDialogsTableSql;
             cmd.ExecuteNonQuery();
         }
@@ -327,7 +329,8 @@ namespace ConsoleApp1
                         {
                             string dialogKey = GetDialogKey(userName, message.To);
                             SaveDialogMessage(dialogKey, userName, message.Text);
-                            if (!string.IsNullOrWhiteSpace(message.To) && clients.TryGetValue(message.To, out var toClient))
+                            if (!string.IsNullOrWhiteSpace(message.To) &&
+                                clients.TryGetValue(message.To, out var toClient))
                             {
                                 SendMessage(toClient.Stream, new Message
                                 {
@@ -615,7 +618,44 @@ namespace ConsoleApp1
             Array.Sort(arr, StringComparer.Ordinal);
             return $"{arr[0]}|{arr[1]}";
         }
+
+
+
+        static readonly string BackupDirectory = "db_backups";
+        static readonly string BackupFilePath = Path.Combine(BackupDirectory, "chat_users_backup.db");
+
+        static void StartBackupTimer()
+        {
+            if (!Directory.Exists(BackupDirectory))
+                Directory.CreateDirectory(BackupDirectory);
+
+            Timer timer = new Timer(_ => BackupDatabase(), null, TimeSpan.Zero, TimeSpan.FromHours(1));
+        }
+
+        static void BackupDatabase()
+        {
+            try
+            {
+                if (File.Exists(BackupFilePath))
+                {
+                    File.Delete(BackupFilePath);
+                }
+                File.Copy(DbFile, BackupFilePath);
+                Console.WriteLine($"Резервная копия базы данных сохранена: {BackupFilePath}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Ошибка при резервном копировании базы данных: {ex.Message}");
+            }
+        }
+
+
+
     }
+
+
+
+
 
     class ClientInfo
     {

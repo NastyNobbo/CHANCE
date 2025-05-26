@@ -90,6 +90,7 @@ namespace WpfApp1
                     LoginPanel.Visibility = Visibility.Collapsed;
                     ChatGrid.Visibility = Visibility.Visible;
                     this.ResizeMode = ResizeMode.CanResize;
+                    this.WindowState = WindowState.Maximized;
                     Title = $"Wocha - {userName}";
                     if (response.Users != null)
                     {
