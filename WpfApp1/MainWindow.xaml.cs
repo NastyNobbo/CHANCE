@@ -89,7 +89,8 @@ namespace WpfApp1
                     userName = response.Name ?? login;
                     LoginPanel.Visibility = Visibility.Collapsed;
                     ChatGrid.Visibility = Visibility.Visible;
-                    Title = $"Чат - {userName}";
+                    this.ResizeMode = ResizeMode.CanResize;
+                    Title = $"Wocha - {userName}";
                     if (response.Users != null)
                     {
                         groupChats.Clear();
@@ -494,7 +495,7 @@ namespace WpfApp1
             // Возврат в окно авторизации
             ChatGrid.Visibility = Visibility.Collapsed;
             LoginPanel.Visibility = Visibility.Visible;
-            Title = "Чат - Авторизация";
+            Title = "Wocha";
             txtMessage.IsEnabled = false;
             btnSend.IsEnabled = false;
 

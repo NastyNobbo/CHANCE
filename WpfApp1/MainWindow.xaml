@@ -4,6 +4,7 @@
         Title="Wocha" Height="600"
         Width="800"
         WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
         Background="#FF1A1A1A" >
 
 
@@ -24,7 +25,7 @@
                             <TextBlock Text="Логин:" FontFamily="Arial Black"
 FontSize="12"
 Foreground="#FF02C3BA"/>
-                            <TextBox x:Name="txtLogin" Margin="0,5,0,0" Padding="10"
+                            <TextBox x:Name="txtLogin" Margin="0,5,0,0" Padding="10" 
                                  Foreground="#FF02C3BA" 
 Background="#FF1B1B1B" 
 FontSize="12" 
