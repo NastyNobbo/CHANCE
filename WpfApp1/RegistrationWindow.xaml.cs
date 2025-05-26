@@ -52,24 +52,15 @@ namespace WpfApp1
             string password = txtRegPassword.Password;
             string repeatPassword = txtRepeatRegPassword.Password;
 
-            if (string.IsNullOrEmpty(name))
+            if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(login) ||
+            string.IsNullOrEmpty(password) || string.IsNullOrEmpty(repeatPassword))
             {
-                MessageBox.Show("Введите имя.");
-                return;
-            }
-            if (string.IsNullOrEmpty(login))
-            {
-                MessageBox.Show("Введите логин.");
-                return;
-            }
-            if (string.IsNullOrEmpty(password))
-            {
-                MessageBox.Show("Введите пароль.");
+                MessageBox.Show("Заполните все поля!");
                 return;
             }
             if (password != repeatPassword)
             {
-                MessageBox.Show("Пароли не совпадают.");
+                MessageBox.Show("Пароли не совпадают!");
                 return;
             }
             try

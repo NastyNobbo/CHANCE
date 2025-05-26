@@ -407,7 +407,7 @@ namespace WpfApp1
                     Thread.Sleep(100); // подождать, чтобы сообщение успело уйти
                 }
             }
-            catch { /* игнорируем */ }
+            catch { }
 
             try { listenThread?.Abort(); } catch { }
             stream?.Close();
@@ -416,7 +416,9 @@ namespace WpfApp1
 
         private void btnCreateGroup_Click(object sender, RoutedEventArgs e)
         {
-            string groupName = Microsoft.VisualBasic.Interaction.InputBox("Введите название группы", "Новая группа");
+            string groupName = 
+                Microsoft.VisualBasic.Interaction.InputBox("Введите название группы", 
+                "Новая группа");
             if (!string.IsNullOrWhiteSpace(groupName))
             {
                 SendMessage(new Message { Type = "create_group", Text = groupName });

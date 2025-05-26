@@ -108,7 +108,7 @@ namespace WpfApp1
 
             File.WriteAllLines(ipStorePath, ipSet);
 
-            // ✅ Если галочка стоит — сохраняем как дефолтный
+            // Если галочка стоит — сохраняем как дефолтный
             if (chkUseAlways.IsChecked == true)
             {
                 File.WriteAllText(defaultPath, $"{ip}:{port}");
