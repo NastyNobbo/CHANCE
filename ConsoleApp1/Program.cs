@@ -37,24 +37,39 @@ namespace ConsoleApp1
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Сервер запускается...");
 
-            Directory.CreateDirectory(AppDataPath);
-
-            InitializeDatabase();
-            StartBackupTimer();
-
-            IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
-            const int port = 56000;
-            listener = new TcpListener(myIp, port);
-            listener.Start();
-            Console.WriteLine($"Сервер запущен на IP-адресе {myIp} и порту {port}");
-
-
-            while (true)
+            try
             {
-                TcpClient client = listener.AcceptTcpClient();
-                ThreadPool.QueueUserWorkItem(ClientHandler, client);
+
+                Console.WriteLine("Сервер запускается...");
+
+                Directory.CreateDirectory(AppDataPath);
+
+                InitializeDatabase();
+                StartBackupTimer();
+
+                IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
+                const int port = 56000;
+                listener = new TcpListener(myIp, port);
+                listener.Start();
+                Console.WriteLine($"Сервер запущен на IP-адресе {myIp} и порту {port}");
+
+
+
+                while (true)
+                {
+                    TcpClient client = listener.AcceptTcpClient();
+                    ThreadPool.QueueUserWorkItem(ClientHandler, client);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ОШИБКА: {ex.Message}");
+            }
+            finally
+            {
+                Console.WriteLine("Нажмите любую клавишу для выхода...");
+                Console.ReadKey();
             }
         }
         static void InitializeDatabase()
