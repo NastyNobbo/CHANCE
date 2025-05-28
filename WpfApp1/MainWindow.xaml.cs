@@ -498,6 +498,8 @@ namespace WpfApp1
             // Возврат в окно авторизации
             ChatGrid.Visibility = Visibility.Collapsed;
             LoginPanel.Visibility = Visibility.Visible;
+            this.ResizeMode = ResizeMode.NoResize;
+            this.WindowState = WindowState.Normal;
             Title = "Wocha";
             txtMessage.IsEnabled = false;
             btnSend.IsEnabled = false;

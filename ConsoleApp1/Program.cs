@@ -27,17 +27,22 @@ namespace ConsoleApp1
         // Сообщения хранятся как строки с форматом: "Отправитель: Текст"
         static ConcurrentDictionary<string, List<string>> dialogs = new ConcurrentDictionary<string, List<string>>();
 
-        const string BackupDbFile = "chat_users_backup.db";
-        const string DbFile = "chat_users.db";
-        static string ConnectionString = $"Data Source={DbFile}";
+        static readonly string AppDataPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "WochaServer");
+
+        static readonly string DbFile = Path.Combine(AppDataPath, "chat_users.db");
+        static readonly string BackupDbFile = Path.Combine(AppDataPath, "chat_users_backup.db");
+        static readonly string ConnectionString = $"Data Source={DbFile};";
 
         static void Main(string[] args)
         {
             Console.WriteLine("Сервер запускается...");
 
+            Directory.CreateDirectory(AppDataPath);
+
             InitializeDatabase();
             StartBackupTimer();
-
 
             IPAddress myIp = ConnectionData.GetCorrectLocalIPv4();
             const int port = 56000;
@@ -54,8 +59,15 @@ namespace ConsoleApp1
         }
         static void InitializeDatabase()
         {
+            bool newDb = !File.Exists(DbFile);
+
             using var connection = new SQLiteConnection(ConnectionString);
             connection.Open();
+
+            if (newDb)
+                Console.WriteLine("Создаётся новая база данных...");
+
+
             string createUsersTableSql = @"
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -630,16 +642,18 @@ namespace ConsoleApp1
         {
             try
             {
-                if (File.Exists(BackupDbFile))
-                {
-                    File.Delete(BackupDbFile);
-                }
-                File.Copy(DbFile, BackupDbFile);
-                Console.WriteLine($"Резервная копия базы данных сохранена: {BackupDbFile}");
+                using var source = new SQLiteConnection(ConnectionString);
+                using var dest = new SQLiteConnection($"Data Source={BackupDbFile};");
+
+                source.Open();
+                dest.Open();
+
+                source.BackupDatabase(dest, "main", "main", -1, null, 0);
+                Console.WriteLine($"Резервная копия создана: {BackupDbFile}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Ошибка при резервном копировании базы данных: {ex.Message}");
+                Console.WriteLine($"Ошибка резервного копирования: {ex.Message}");
             }
         }
 
