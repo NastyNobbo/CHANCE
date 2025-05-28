@@ -27,6 +27,7 @@ namespace ConsoleApp1
         // Сообщения хранятся как строки с форматом: "Отправитель: Текст"
         static ConcurrentDictionary<string, List<string>> dialogs = new ConcurrentDictionary<string, List<string>>();
 
+        const string BackupDbFile = "chat_users_backup.db";
         const string DbFile = "chat_users.db";
         static string ConnectionString = $"Data Source={DbFile}";
 
@@ -620,15 +621,8 @@ namespace ConsoleApp1
         }
 
 
-
-        static readonly string BackupDirectory = "db_backups";
-        static readonly string BackupFilePath = Path.Combine(BackupDirectory, "chat_users_backup.db");
-
         static void StartBackupTimer()
         {
-            if (!Directory.Exists(BackupDirectory))
-                Directory.CreateDirectory(BackupDirectory);
-
             Timer timer = new Timer(_ => BackupDatabase(), null, TimeSpan.Zero, TimeSpan.FromHours(1));
         }
 
@@ -636,12 +630,12 @@ namespace ConsoleApp1
         {
             try
             {
-                if (File.Exists(BackupFilePath))
+                if (File.Exists(BackupDbFile))
                 {
-                    File.Delete(BackupFilePath);
+                    File.Delete(BackupDbFile);
                 }
-                File.Copy(DbFile, BackupFilePath);
-                Console.WriteLine($"Резервная копия базы данных сохранена: {BackupFilePath}");
+                File.Copy(DbFile, BackupDbFile);
+                Console.WriteLine($"Резервная копия базы данных сохранена: {BackupDbFile}");
             }
             catch (Exception ex)
             {
