@@ -10,8 +10,14 @@ namespace WpfApp1
         public string IpAddress { get; private set; }
         public int Port { get; private set; }
 
-        private static string IpStoreFile = "ip_store.txt";
-        private static string PortStoreFile = "port_store.txt";
+
+        private static readonly string AppDataPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Wocha");
+
+        private static readonly string IpStoreFile = Path.Combine(AppDataPath, "ip_store.txt");
+        private static readonly string PortStoreFile = Path.Combine(AppDataPath, "port_store.txt");
+        private static readonly string DefaultConnectionFile = Path.Combine(AppDataPath, "default_connection.txt");
 
         public ConnectionSettingsWindow(string currentIp, int currentPort)
         {
@@ -20,6 +26,8 @@ namespace WpfApp1
             var ipSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var portSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             // Загрузим список IP из файла (если есть)
+
+            Directory.CreateDirectory(AppDataPath);
 
             ipAdder(ipSet, currentIp);
             portAdder(portSet, currentPort.ToString());
@@ -89,29 +97,25 @@ namespace WpfApp1
                 return;
             }
 
-            string ipStorePath = "ip_store.txt";
-            string defaultPath = "default_connection.txt";
             HashSet<string> ipSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (File.Exists(ipStorePath))
+            if (File.Exists(IpStoreFile))
             {
-                foreach (var line in File.ReadAllLines(ipStorePath))
+                foreach (var line in File.ReadAllLines(IpStoreFile))
                 {
                     string trimmed = line.Trim();
                     if (!string.IsNullOrEmpty(trimmed))
                         ipSet.Add(trimmed);
                 }
             }
-
             if (!ipSet.Contains(ip))
                 ipSet.Add(ip);
 
-            File.WriteAllLines(ipStorePath, ipSet);
+            File.WriteAllLines(IpStoreFile, ipSet);
 
-            // Если галочка стоит — сохраняем как дефолтный
             if (chkUseAlways.IsChecked == true)
             {
-                File.WriteAllText(defaultPath, $"{ip}:{port}");
+                File.WriteAllText(DefaultConnectionFile, $"{ip}:{port}");
             }
 
             IpAddress = ip;
